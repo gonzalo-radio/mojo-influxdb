@@ -4,7 +4,6 @@ package Mojo::InfluxDB::Tiny;
 
 # ABSTRACT: Super simple InfluxDB async client
 
-use common::sense;
 use Mojo::Base -base, -signatures;
 use Mojo::Collection qw/ c /;
 use List::MoreUtils qw/ zip /;
@@ -38,15 +37,12 @@ sub query_p ( $self, $query, $database ) {
 }
 
 sub get_points ( $self, $rs ) {
-    my @results;
-    my $series = $rs->{results}[0]{series};
-    for my $serie ($series->@*) {
-        my @columns = $serie->{columns}->@*;
-        for my $value ($serie->{values}->@*) {
-            push @results, +{ zip(@columns, $value->@*), ( $serie->{tags} ? $serie->{tags}->%* : () ) };
-        }
-    }
-    c(@results);
+    c($rs->{results}[0]{series}->@*)->map(sub ( $serie ) {
+        my @columns = $_->{columns}->@*;
+        c($serie->{values}->@*)->map(sub {
+            +{ zip(@columns, $_->@*), ( $serie->{tags} ? $serie->{tags}->%* : () ) }
+        });
+    })->flatten->compact;
 }
 
 sub query_url ( $self ) { $self->_url('query') }
