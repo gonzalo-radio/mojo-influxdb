@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-package Mojo::InfluxDB::Tiny;
+package Mojo::InfluxDB;
 
 # ABSTRACT: Super simple InfluxDB async client
 
@@ -8,17 +8,11 @@ use Mojo::Base -base, -signatures;
 use Mojo::Collection qw/ c /;
 use List::MoreUtils qw/ zip /;
 
-has 'host';
-has 'port';
-has 'ua'  => sub { Mojo::UserAgent->new };
-has 'url' => sub ( $self ) {
-    my $url = Mojo::URL->new( sprintf( 'http://%s:%s', $self->host, $self->port ) );
-    {
-        base  => $url->clone,
-        query => $url->clone->path('/query'),
-        ping  => $url->clone->path('/ping'),
-        write => $url->clone->path('/write')
-    };
+has 'host' => 'localhost';
+has 'port' => '8006';
+has 'ua'   => sub { Mojo::UserAgent->new };
+has 'url'  => sub ( $self ) {
+    Mojo::URL->new( sprintf( 'http://%s:%s', $self->host, $self->port ) );
 };
 
 sub query ( $self, $query, $database ) {
@@ -33,7 +27,7 @@ sub query ( $self, $query, $database ) {
 
 sub query_p ( $self, $query, $database ) {
     $query = join( ';', @$query ) if $query eq 'ARRAY';
-    $self->ua->get_p( $self->query_url->query({ q => $query, db => $database }) );
+    $self->ua->get_p( $self->_url('query')->query({ q => $query, db => $database }) );
 }
 
 sub get_points ( $self, $rs ) {
@@ -45,10 +39,7 @@ sub get_points ( $self, $rs ) {
     })->flatten->compact;
 }
 
-sub query_url ( $self ) { $self->_url('query') }
-sub write_url ( $self ) { $self->_url('write') }
-sub ping_url ( $self )  { $self->_url('ping') }
-sub _url ( $self, $type ) { $self->url->{$type}->clone }
+sub _url ( $self, $action ) { $self->url->path("/$action")->clone }
 
 1;
 
@@ -60,7 +51,7 @@ Mojo::InfluxDB::Tiny - TODO
 
 =head1 SYNOPSIS
     use Mojo::InfluxDB::Tiny;
-    my $client = Mojo::InfluxDB::Tiny->new( host => '127.0.0.1', port => '8086' );
+    my $client = Mojo::InfluxDB::Tiny->new;
 
     my $result_set = $client->query('SELECT last("state") AS "last_state" FROM "telegraf"."thirty_days"."mongodb" WHERE time > now() - 5m AND time < now() AND "host"=\'mongodb01\' GROUP BY time(1h), "host"', 'telegraf');
 
@@ -76,15 +67,9 @@ TODO
 
 =head2 get_points
 
-=head2 ping_url
-
 =head2 query
 
 =head2 query_p
-
-=head2 query_url
-
-=head2 write_url
 
 =head1 AUTHOR
 
