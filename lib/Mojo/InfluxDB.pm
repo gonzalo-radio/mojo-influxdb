@@ -6,7 +6,9 @@ package Mojo::InfluxDB;
 
 use Mojo::Base -base, -signatures;
 use Mojo::Collection qw/ c /;
-use List::MoreUtils qw/ zip /;
+
+use Mojo::InfluxDB::Result;
+use Mojo::InfluxDB::Row;
 
 has 'host' => 'localhost';
 has 'port' => '8006';
@@ -16,27 +18,25 @@ has 'url'  => sub ( $self ) {
 };
 
 sub query ( $self, $query, $database ) {
-    my $rs;
+    my $results;
+
     $self->query_p( $query, $database )->then(sub ( $tx ) {
-        $rs = $tx->res->json();
+        $results = c($tx->res->json('/results')->@*)->map(sub{
+            my $series = delete $_->{series};
+            my $result = Mojo::InfluxDB::Result->new(%$_);
+            $result->series( c($series->@*)->map(sub{ Mojo::InfluxDB::Row->new(%$_) })->compact );
+            $result;
+        })->compact;
     })->catch( sub ( $error ) {
         say "Error: $error";
     })->wait;
-    $rs;
+
+    $results;
 }
 
 sub query_p ( $self, $query, $database ) {
     $query = join( ';', @$query ) if $query eq 'ARRAY';
     $self->ua->get_p( $self->_url('query')->query({ q => $query, db => $database }) );
-}
-
-sub get_points ( $self, $rs ) {
-    c($rs->{results}[0]{series}->@*)->map(sub ( $serie ) {
-        my @columns = $_->{columns}->@*;
-        c($serie->{values}->@*)->map(sub {
-            +{ zip(@columns, $_->@*), ( $serie->{tags} ? $serie->{tags}->%* : () ) }
-        });
-    })->flatten->compact;
 }
 
 sub _url ( $self, $action ) { $self->url->path("/$action")->clone }
@@ -51,11 +51,11 @@ Mojo::InfluxDB::Tiny - TODO
 
 =head1 SYNOPSIS
     use Mojo::InfluxDB::Tiny;
-    my $client = Mojo::InfluxDB::Tiny->new;
+    my $client = Mojo::InfluxDB->new;
 
-    my $result_set = $client->query('SELECT last("state") AS "last_state" FROM "telegraf"."thirty_days"."mongodb" WHERE time > now() - 5m AND time < now() AND "host"=\'mongodb01\' GROUP BY time(1h), "host"', 'telegraf');
+    my $result = $client->query('SELECT last("state") AS "last_state" FROM "telegraf"."thirty_days"."mongodb" WHERE time > now() - 5m AND time < now() AND "host"=\'mongodb01\' GROUP BY time(1h), "host"', 'telegraf');
 
-    $client->get_points($result_set);
+    $client->first->points;
 
 =head1 DESCRIPTION
 
@@ -64,8 +64,6 @@ TODO
 =head1 ATTRIBUTES
 
 =head1 METHODS
-
-=head2 get_points
 
 =head2 query
 
