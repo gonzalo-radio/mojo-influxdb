@@ -11,11 +11,12 @@ use Mojo::InfluxDB::Result;
 use Mojo::InfluxDB::Row;
 
 has 'host' => 'localhost';
-has 'port' => '8006';
+has 'port' => '8086';
 has 'ua'   => sub { Mojo::UserAgent->new };
 has 'url'  => sub ( $self ) {
     Mojo::URL->new( sprintf( 'http://%s:%s', $self->host, $self->port ) );
 };
+has 'time_zone' => undef;
 
 sub query ( $self, $query, $database ) {
     my $results;
@@ -24,7 +25,9 @@ sub query ( $self, $query, $database ) {
         $results = c($tx->res->json('/results')->@*)->map(sub{
             my $series = delete $_->{series};
             my $result = Mojo::InfluxDB::Result->new(%$_);
-            $result->series( c($series->@*)->map(sub{ Mojo::InfluxDB::Row->new(%$_) })->compact );
+            $result->series( c($series->@*)->map(sub{
+                Mojo::InfluxDB::Row->new( %$_, time_zone => $self->time_zone )
+            })->compact );
             $result;
         })->compact;
     })->catch( sub ( $error ) {
