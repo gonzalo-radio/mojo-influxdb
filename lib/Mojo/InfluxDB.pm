@@ -21,28 +21,44 @@ has 'time_zone' => undef;
 sub query ( $self, $query, $database ) {
     my $results;
 
-    $self->query_p( $query, $database )->then(sub ( $tx ) {
-        $results = c($tx->res->json('/results')->@*)->map(sub{
-            my $series = delete $_->{series};
-            my $result = Mojo::InfluxDB::Result->new(%$_);
-            $result->series( c($series->@*)->map(sub{
-                Mojo::InfluxDB::Row->new( %$_, time_zone => $self->time_zone )
-            })->compact );
-            $result;
-        })->compact;
-    })->catch( sub ( $error ) {
-        say "Error: $error";
+    $self->query_p( $query, $database )->then(sub {
+        $results = shift;
     })->wait;
 
     $results;
 }
 
 sub query_p ( $self, $query, $database ) {
-    $query = join( ';', @$query ) if $query eq 'ARRAY';
-    $self->ua->get_p( $self->_url('query')->query({ q => $query, db => $database }) );
+    $self->raw_query_p( $query, $database )->then(sub{
+        return $self->process_results(shift);
+    });
 }
 
-sub _url ( $self, $action ) { $self->url->path("/$action")->clone }
+sub raw_query_p ( $self, $query, $database ) {
+    $query = join( ';', @$query ) if $query eq 'ARRAY';
+    $self->ua->get_p(
+        $self->_url('query')->query({ q => $query, db => $database })
+    )->catch( sub ($error) {
+        say "Error: $error";
+    });
+}
+
+sub process_results ( $self, $tx ) {
+    c($tx->res->json('/results')->@*)->map(sub{
+        my $series = delete $_->{series};
+        my $result = Mojo::InfluxDB::Result->new(%$_);
+
+        $result->series( c( $series->@* )->map(sub{
+            Mojo::InfluxDB::Row->new( %$_, time_zone => $self->time_zone )
+        })->compact );
+
+        $result;
+    })->compact;
+}
+
+sub _url ( $self, $action ) {
+    $self->url->path("/$action")->clone
+}
 
 1;
 
@@ -50,7 +66,7 @@ sub _url ( $self, $action ) { $self->url->path("/$action")->clone }
 
 =head1 NAME
 
-Mojo::InfluxDB::Tiny - TODO
+Mojo::InfluxDB - TODO
 
 =head1 SYNOPSIS
     use Mojo::InfluxDB::Tiny;
