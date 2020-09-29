@@ -4,4 +4,4 @@ BEGIN {
 	use_ok( 'Mojo::InfluxDB' );
 }
 
-diag( "Testing Resque $Resque::VERSION, Perl $], $^X" );
+diag( "Testing Mojo::InfluxDB $Mojo::InfluxDB::VERSION, Perl $], $^X" );
